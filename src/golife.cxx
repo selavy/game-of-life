@@ -34,6 +34,15 @@ void Board::set_dead(int x, int y) noexcept
     brd[ix(x, y)] = DEAD;
 }
 
+void Board::flip_state(int x,int y) noexcept
+{
+    if (live(x, y)) {
+        set_dead(x, y);
+    } else {
+        set_live(x, y);
+    }
+}
+
 Board Board::tick() const noexcept
 {
     Board nb = *this;

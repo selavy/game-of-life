@@ -49,9 +49,10 @@ static ImVec4 GetColor(bool islive) noexcept
 
 struct GameOfLife
 {
-    bool setup_mode = false;
+    bool setup_mode = true;
     int window_w;
     int window_h;
+    gol::Board setupBoard = {};
     std::vector<gol::Board> boards;
 };
 
@@ -59,6 +60,7 @@ void ShowGameOfLifeWindow(bool* show_game_of_life_window, GameOfLife& state)
 {
     auto& boards = state.boards;
     auto& board = boards.back();
+    auto& setupBoard = state.setupBoard;
     const int xmax = board.ncols;
     const int ymax = board.nrows;
 
@@ -68,9 +70,30 @@ void ShowGameOfLifeWindow(bool* show_game_of_life_window, GameOfLife& state)
     if (ImGui::Begin("Game Of Life", show_game_of_life_window, ImGuiWindowFlags_MenuBar))
     {
         if (state.setup_mode) {
+            int id = 0;
+            for (int y = 0; y < ymax; ++y) {
+                for (int x = 0; x < xmax; ++x) {
+                    ImGui::PushID(id++);
+                    const auto square_color = GetColor(setupBoard.live(x, y));
+                    ImGui::PushStyleColor(ImGuiCol_Button, square_color);
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, square_color);
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, square_color);
+                    ImGui::SameLine(/*offset_from_start_x*/0., /*spacing*/5.);
+                    if (ImGui::Button("", ImVec2(40, 40))) {
+                        setupBoard.flip_state(x, y);
+                    }
+                    ImGui::PopStyleColor(3);
+                    ImGui::PopID();
+                }
+                ImGui::NewLine();
+            }
+            ImGui::NewLine();
+
             if (ImGui::Button("Done", ImVec2(100, 40)))
             {
                 state.setup_mode = false;
+                state.boards.clear();
+                state.boards.emplace_back(state.setupBoard);
             }
         } else {
             int id = 0;
@@ -106,6 +129,7 @@ void ShowGameOfLifeWindow(bool* show_game_of_life_window, GameOfLife& state)
             if (ImGui::Button("Setup", ImVec2(100, 40)))
             {
                 state.setup_mode = true;
+                state.setupBoard = boards.back();
             }
         }
     }
@@ -200,11 +224,15 @@ int main(int argc, char** argv)
     GameOfLife gol_state{
         .window_w = start_window_w,
         .window_h = start_window_h,
-        .boards = { { .nrows = 8, .ncols = 8} },
+        .setupBoard = { .nrows = 8, .ncols = 8 },
+        // .boards = { { .nrows = 8, .ncols = 8} },
+        .boards = {},
     };
-    gol_state.boards[0].set_live(3, 4);
-    gol_state.boards[0].set_live(3, 5);
-    gol_state.boards[0].set_live(3, 6);
+    gol_state.setupBoard.set_live(3, 4);
+    gol_state.setupBoard.set_live(3, 5);
+    gol_state.setupBoard.set_live(3, 6);
+    // gol_state.setupBoard = gol_state.boards.back();
+    gol_state.boards.push_back(gol_state.setupBoard);
 
     glfwSetWindowUserPointer(window, &gol_state);
     glfwSetWindowSizeCallback(window, &OnWindowResize);
