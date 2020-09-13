@@ -49,6 +49,8 @@ static ImVec4 GetColor(bool islive) noexcept
 
 struct GameOfLife
 {
+    int window_w;
+    int window_h;
     std::vector<gol::Board> boards;
 };
 
@@ -58,6 +60,9 @@ void ShowGameOfLifeWindow(bool* show_game_of_life_window, GameOfLife& state)
     auto& board = boards.back();
     const int xmax = board.ncols;
     const int ymax = board.nrows;
+
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(state.window_w, state.window_h));
 
     if (ImGui::Begin("Game Of Life", show_game_of_life_window, ImGuiWindowFlags_MenuBar))
     {
@@ -94,6 +99,13 @@ void ShowGameOfLifeWindow(bool* show_game_of_life_window, GameOfLife& state)
     ImGui::End();
 }
 
+void OnWindowResize(GLFWwindow* window, int width, int height)
+{
+    auto* s = static_cast<GameOfLife*>(glfwGetWindowUserPointer(window));
+    s->window_w = width;
+    s->window_h = height;
+}
+
 int main(int argc, char** argv)
 {
     glfwSetErrorCallback(glfw_error_callback);
@@ -118,7 +130,10 @@ int main(int argc, char** argv)
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
 #endif
 
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
+    const int start_window_w = 1280;
+    const int start_window_h = 720;
+    GLFWwindow* window = glfwCreateWindow(start_window_w, start_window_h,
+            "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
     if (window == NULL) {
         return 1;
     }
@@ -170,11 +185,16 @@ int main(int argc, char** argv)
     bool show_metrics_window = true;
     bool show_game_of_life_window = true;
     GameOfLife gol_state{
+        .window_w = start_window_w,
+        .window_h = start_window_h,
         .boards = { { .nrows = 8, .ncols = 8} },
     };
     gol_state.boards[0].set_live(3, 4);
     gol_state.boards[0].set_live(3, 5);
     gol_state.boards[0].set_live(3, 6);
+
+    glfwSetWindowUserPointer(window, &gol_state);
+    glfwSetWindowSizeCallback(window, &OnWindowResize);
 
     while (!glfwWindowShouldClose(window)) {
         // Poll and handle events (inputs, window resize, etc.)
