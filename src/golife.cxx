@@ -1,6 +1,7 @@
 #include "golife.h"
 #include <iostream>
 #include <cassert>
+#include <algorithm>
 
 namespace gol {
 
@@ -83,6 +84,11 @@ int Board::live_neighbors(const int x, const int y) const noexcept
     return result;
 }
 
+bool Board::empty() const noexcept
+{
+    return std::all_of(brd.begin(), brd.end(), [&](int cell) { return cell == DEAD; });
+}
+
 std::ostream& operator<<(std::ostream& os, const Board& b)
 {
     const std::string live(" * ");
@@ -96,6 +102,22 @@ std::ostream& operator<<(std::ostream& os, const Board& b)
         os << "|\n" << rowdiv << "\n";
     }
     return os;
+}
+
+bool operator==(const Board& lhs, const Board& rhs) noexcept
+{
+    if (lhs.nrows != rhs.nrows) {
+        return false;
+    }
+    if (lhs.ncols != rhs.ncols) {
+        return false;
+    }
+    return std::equal(lhs.brd.begin(), lhs.brd.end(), rhs.brd.begin());
+}
+
+bool operator!=(const Board& lhs, const Board& rhs) noexcept
+{
+    return !(lhs == rhs);
 }
 
 } // namespace gol

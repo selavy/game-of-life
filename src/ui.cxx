@@ -9,6 +9,7 @@
 #include <iostream>
 #include <variant>
 #include <fstream>
+#include <chrono>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -23,7 +24,8 @@
 #define DEBUG(format, ...) fmt::print(std::cerr, "[DEBUG ({:s})]: " format "\n", __func__, ##__VA_ARGS__)
 #define INFO(format, ...)  fmt::print(std::cerr, "[INFO  ({:s})]: " format "\n", __func__, ##__VA_ARGS__)
 
-static void glfw_error_callback(int error, const char* description) {
+static void glfw_error_callback(int error, const char* description)
+{
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
@@ -37,7 +39,6 @@ static ImVec4 MakeColor(float r, float g, float b, float a = 255) noexcept
     return { x, y, z, w };
 }
 
-
 ImVec4 LiveColor = MakeColor( 50,  50, 233); // dark blue
 // ImVec4 LiveColor = MakeColor( 66,  66,  66); // gray
 ImVec4 DeadColor = MakeColor(206, 187, 158); // light oak
@@ -49,16 +50,50 @@ static ImVec4 GetColor(bool islive) noexcept
 
 struct GameOfLife
 {
+    using Clock = std::chrono::steady_clock;
+    using TimePoint = typename Clock::time_point;
+    using Duration  = typename Clock::duration;
+
     bool setup_mode = true;
     int window_w;
     int window_h;
     gol::Board setupBoard = {};
     std::vector<gol::Board> boards;
+
+    bool      playing = false;
+    TimePoint next_tick_ts = {};
+    Duration  tick_period  = {};
 };
+
+bool IsSteadyState(GameOfLife& state)
+{
+    auto& boards = state.boards;
+    auto& board = boards.back();
+    if (board.empty()) {
+        return true;
+    }
+    if (boards.size() <= 1) {
+        return false;
+    }
+    auto& board2 = boards[boards.size() - 2];
+    return board == board2;
+}
 
 void ShowGameOfLifeWindow(bool* show_game_of_life_window, GameOfLife& state)
 {
     auto& boards = state.boards;
+
+    if (!state.setup_mode && state.playing) {
+        auto now = GameOfLife::Clock::now();
+        if (now >= state.next_tick_ts) {
+            state.next_tick_ts = now + state.tick_period;
+            boards.push_back(boards.back().tick());
+        }
+        if (IsSteadyState(state)) {
+            state.playing = false;
+        }
+    }
+
     auto& board = boards.back();
     auto& setupBoard = state.setupBoard;
     const int xmax = board.ncols;
@@ -67,7 +102,12 @@ void ShowGameOfLifeWindow(bool* show_game_of_life_window, GameOfLife& state)
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(state.window_w, state.window_h));
 
-    if (ImGui::Begin("Game Of Life", show_game_of_life_window, ImGuiWindowFlags_MenuBar))
+    const auto window_flags = 0
+        | ImGuiWindowFlags_NoDecoration
+        | ImGuiWindowFlags_NoCollapse
+        | ImGuiWindowFlags_AlwaysAutoResize
+        ;
+    if (ImGui::Begin("Game Of Life", show_game_of_life_window, window_flags))
     {
         if (state.setup_mode) {
             int id = 0;
@@ -89,7 +129,9 @@ void ShowGameOfLifeWindow(bool* show_game_of_life_window, GameOfLife& state)
             }
             ImGui::NewLine();
 
-            if (ImGui::Button("Done", ImVec2(100, 40)))
+            const int button_w = 100;
+            ImGui::SameLine(state.window_w / 2 - button_w / 2, 0);
+            if (ImGui::Button("Done", ImVec2(button_w, 40)))
             {
                 state.setup_mode = false;
                 state.boards.clear();
@@ -114,22 +156,41 @@ void ShowGameOfLifeWindow(bool* show_game_of_life_window, GameOfLife& state)
             ImGui::NewLine();
 
             ImGui::Text("Iteration: %zu", boards.size());
-            if (ImGui::Button("Prev", ImVec2(100, 40)))
-            {
-                if (boards.size() > 1) {
-                    boards.pop_back();
+            if (state.playing) {
+                if (ImGui::Button("Stop", ImVec2(100, 40)))
+                {
+                    state.playing = false;
                 }
-            }
-            ImGui::SameLine(0, 5);
-            if (ImGui::Button("Next", ImVec2(100, 40)))
-            {
-                boards.push_back(board.tick());
-            }
-            ImGui::SameLine(0, 5);
-            if (ImGui::Button("Setup", ImVec2(100, 40)))
-            {
-                state.setup_mode = true;
-                state.setupBoard = boards.back();
+            } else {
+                if (ImGui::Button("Play", ImVec2(100, 40)))
+                {
+                    state.playing = true;
+                }
+                ImGui::SameLine(0, 5);
+                if (ImGui::Button("Prev", ImVec2(100, 40)))
+                {
+                    if (boards.size() > 1) {
+                        boards.pop_back();
+                    }
+                }
+                ImGui::SameLine(0, 5);
+                if (ImGui::Button("Next", ImVec2(100, 40)))
+                {
+                    boards.push_back(board.tick());
+                }
+                ImGui::SameLine(0, 5);
+                if (ImGui::Button("Setup", ImVec2(100, 40)))
+                {
+                    state.setup_mode = true;
+                    state.setupBoard = boards.back();
+                }
+                ImGui::SameLine(0, 5);
+                if (ImGui::Button("Reset", ImVec2(100, 40)))
+                {
+                    state.setupBoard = boards[0];
+                    state.boards.clear();
+                    state.boards.emplace_back(state.setupBoard);
+                }
             }
         }
     }
@@ -167,104 +228,79 @@ int main(int argc, char** argv)
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
 #endif
 
-    const int start_window_w = 1280;
-    const int start_window_h = 720;
+    const int start_window_w = 700; // 1280;
+    const int start_window_h = 800; // 720;
     GLFWwindow* window = glfwCreateWindow(start_window_w, start_window_h,
-            "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
+            "Game Of Life", NULL, NULL);
     if (window == NULL) {
         return 1;
     }
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);  // Enable vsync
+    glfwSwapInterval(1); // Enable vsync
 
     if (gl3wInit() != 0) {
         fprintf(stderr, "Failed to initialize OpenGL loader!\n");
         return 1;
     }
 
-    // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    (void)io;
-
     io.FontGlobalScale = 1.5;
 
-    // Setup Dear ImGui style
-    ImGui::StyleColorsDark();
-    // ImGui::StyleColorsClassic();
+    // ImGui::StyleColorsDark();
+    ImGui::StyleColorsClassic();
 
-    // Setup Platform/Renderer bindings
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    // Load Fonts
-    // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use
-    // ImGui::PushFont()/PopFont() to select them.
-    // - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
-    // - If the file cannot be loaded, the function will return NULL. Please handle those errors in your application
-    // (e.g. use an assertion, or display an error and quit).
-    // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling
-    // ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
-    // - Read 'docs/FONTS.txt' for more instructions and details.
-    // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double
-    // backslash \\ !
-    // io.Fonts->AddFontDefault();
-    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
-    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
-    // ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL,
-    // io.Fonts->GetGlyphRangesJapanese()); IM_ASSERT(font != NULL);
-
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-    bool show_demo_window = true;
-    bool show_metrics_window = true;
+    bool show_demo_window = false;
+    bool show_metrics_window = false;
     bool show_game_of_life_window = true;
     GameOfLife gol_state{
         .window_w = start_window_w,
         .window_h = start_window_h,
-        .setupBoard = { .nrows = 8, .ncols = 8 },
-        // .boards = { { .nrows = 8, .ncols = 8} },
+        .setupBoard = { .nrows = 15, .ncols = 15 },
         .boards = {},
+        .tick_period = std::chrono::milliseconds(200),
     };
-    gol_state.setupBoard.set_live(3, 4);
-    gol_state.setupBoard.set_live(3, 5);
-    gol_state.setupBoard.set_live(3, 6);
-    // gol_state.setupBoard = gol_state.boards.back();
+
+
+    const std::vector<std::pair<int, int>> starting_position = {
+        // Blinker (period=2)
+        { 3, 4 },
+        { 3, 5 },
+        { 3, 6 },
+
+        // Glider
+        { 7, 7 },
+        { 8, 7 },
+        { 9, 7 },
+        { 9, 6 },
+        { 8, 5 },
+    };
+    for (auto&& [x, y] : starting_position) {
+        gol_state.setupBoard.set_live(x, y);
+    }
     gol_state.boards.push_back(gol_state.setupBoard);
 
     glfwSetWindowUserPointer(window, &gol_state);
     glfwSetWindowSizeCallback(window, &OnWindowResize);
-
     while (!glfwWindowShouldClose(window)) {
-        // Poll and handle events (inputs, window resize, etc.)
-        // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your
-        // inputs.
-        // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
-        // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
-        // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those
-        // two flags.
         glfwPollEvents();
-
-        // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-
         if (show_demo_window) {
             ImGui::ShowDemoWindow(&show_demo_window);
         }
-
         if (show_metrics_window) {
             ImGui::ShowMetricsWindow(&show_metrics_window);
         }
-
         if (show_game_of_life_window) {
             ShowGameOfLifeWindow(&show_game_of_life_window, gol_state);
         }
-
-        // Rendering
         ImGui::Render();
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -272,17 +308,12 @@ int main(int argc, char** argv)
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
         glfwSwapBuffers(window);
     }
-
-    // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-
     glfwDestroyWindow(window);
     glfwTerminate();
-
     return 0;
 }

@@ -17,6 +17,7 @@ struct Board
     void flip_state(int x,int y) noexcept;
     Board tick() const noexcept;
     int live_neighbors(int x, int y) const noexcept;
+    bool empty() const noexcept;
 
     int nrows = {};
     int ncols = {};
@@ -27,6 +28,8 @@ struct Board
 
 private:
     friend std::ostream& operator<<(std::ostream& os, const Board& b);
+    friend bool operator==(const Board& lhs, const Board& rhs) noexcept;
+    friend bool operator!=(const Board& lhs, const Board& rhs) noexcept;
 };
 
 } // namespace gol
