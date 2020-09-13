@@ -17,12 +17,81 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
+#include "golife.h"
+
 
 #define DEBUG(format, ...) fmt::print(std::cerr, "[DEBUG ({:s})]: " format "\n", __func__, ##__VA_ARGS__)
 #define INFO(format, ...)  fmt::print(std::cerr, "[INFO  ({:s})]: " format "\n", __func__, ##__VA_ARGS__)
 
 static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
+}
+
+static ImVec4 MakeColor(float r, float g, float b, float a = 255) noexcept
+{
+    float sc = 1.0f/255.0f;
+    float x = r * sc;
+    float y = g * sc;
+    float z = b * sc;
+    float w = a * sc;
+    return { x, y, z, w };
+}
+
+
+ImVec4 LiveColor = MakeColor( 50,  50, 233); // dark blue
+// ImVec4 LiveColor = MakeColor( 66,  66,  66); // gray
+ImVec4 DeadColor = MakeColor(206, 187, 158); // light oak
+
+static ImVec4 GetColor(bool islive) noexcept
+{
+    return islive ? LiveColor : DeadColor;
+}
+
+struct GameOfLife
+{
+    std::vector<gol::Board> boards;
+};
+
+void ShowGameOfLifeWindow(bool* show_game_of_life_window, GameOfLife& state)
+{
+    auto& boards = state.boards;
+    auto& board = boards.back();
+    const int xmax = board.ncols;
+    const int ymax = board.nrows;
+
+    if (ImGui::Begin("Game Of Life", show_game_of_life_window, ImGuiWindowFlags_MenuBar))
+    {
+        int id = 0;
+        for (int y = 0; y < ymax; ++y) {
+            for (int x = 0; x < xmax; ++x) {
+                ImGui::PushID(id++);
+                const auto square_color = GetColor(board.live(x, y));
+                ImGui::PushStyleColor(ImGuiCol_Button, square_color);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, square_color);
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, square_color);
+                ImGui::SameLine(/*offset_from_start_x*/0., /*spacing*/5.);
+                ImGui::Button("", ImVec2(40, 40));
+                ImGui::PopStyleColor(3);
+                ImGui::PopID();
+            }
+            ImGui::NewLine();
+        }
+        ImGui::NewLine();
+
+        ImGui::Text("Iteration: %zu", boards.size());
+
+        if (ImGui::Button("Prev", ImVec2(100, 40)))
+        {
+            if (boards.size() > 1) {
+                boards.pop_back();
+            }
+        }
+        if (ImGui::Button("Next", ImVec2(100, 40)))
+        {
+            boards.push_back(board.tick());
+        }
+    }
+    ImGui::End();
 }
 
 int main(int argc, char** argv)
@@ -97,9 +166,15 @@ int main(int argc, char** argv)
     // io.Fonts->GetGlyphRangesJapanese()); IM_ASSERT(font != NULL);
 
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-    bool show_demo_window = false;
+    bool show_demo_window = true;
     bool show_metrics_window = true;
     bool show_game_of_life_window = true;
+    GameOfLife gol_state{
+        .boards = { { .nrows = 8, .ncols = 8} },
+    };
+    gol_state.boards[0].set_live(3, 4);
+    gol_state.boards[0].set_live(3, 5);
+    gol_state.boards[0].set_live(3, 6);
 
     while (!glfwWindowShouldClose(window)) {
         // Poll and handle events (inputs, window resize, etc.)
@@ -122,6 +197,10 @@ int main(int argc, char** argv)
 
         if (show_metrics_window) {
             ImGui::ShowMetricsWindow(&show_metrics_window);
+        }
+
+        if (show_game_of_life_window) {
+            ShowGameOfLifeWindow(&show_game_of_life_window, gol_state);
         }
 
         // Rendering
