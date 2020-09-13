@@ -49,6 +49,7 @@ static ImVec4 GetColor(bool islive) noexcept
 
 struct GameOfLife
 {
+    bool setup_mode = false;
     int window_w;
     int window_h;
     std::vector<gol::Board> boards;
@@ -66,34 +67,46 @@ void ShowGameOfLifeWindow(bool* show_game_of_life_window, GameOfLife& state)
 
     if (ImGui::Begin("Game Of Life", show_game_of_life_window, ImGuiWindowFlags_MenuBar))
     {
-        int id = 0;
-        for (int y = 0; y < ymax; ++y) {
-            for (int x = 0; x < xmax; ++x) {
-                ImGui::PushID(id++);
-                const auto square_color = GetColor(board.live(x, y));
-                ImGui::PushStyleColor(ImGuiCol_Button, square_color);
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, square_color);
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, square_color);
-                ImGui::SameLine(/*offset_from_start_x*/0., /*spacing*/5.);
-                ImGui::Button("", ImVec2(40, 40));
-                ImGui::PopStyleColor(3);
-                ImGui::PopID();
+        if (state.setup_mode) {
+            if (ImGui::Button("Done", ImVec2(100, 40)))
+            {
+                state.setup_mode = false;
+            }
+        } else {
+            int id = 0;
+            for (int y = 0; y < ymax; ++y) {
+                for (int x = 0; x < xmax; ++x) {
+                    ImGui::PushID(id++);
+                    const auto square_color = GetColor(board.live(x, y));
+                    ImGui::PushStyleColor(ImGuiCol_Button, square_color);
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, square_color);
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, square_color);
+                    ImGui::SameLine(/*offset_from_start_x*/0., /*spacing*/5.);
+                    ImGui::Button("", ImVec2(40, 40));
+                    ImGui::PopStyleColor(3);
+                    ImGui::PopID();
+                }
+                ImGui::NewLine();
             }
             ImGui::NewLine();
-        }
-        ImGui::NewLine();
 
-        ImGui::Text("Iteration: %zu", boards.size());
-
-        if (ImGui::Button("Prev", ImVec2(100, 40)))
-        {
-            if (boards.size() > 1) {
-                boards.pop_back();
+            ImGui::Text("Iteration: %zu", boards.size());
+            if (ImGui::Button("Prev", ImVec2(100, 40)))
+            {
+                if (boards.size() > 1) {
+                    boards.pop_back();
+                }
             }
-        }
-        if (ImGui::Button("Next", ImVec2(100, 40)))
-        {
-            boards.push_back(board.tick());
+            ImGui::SameLine(0, 5);
+            if (ImGui::Button("Next", ImVec2(100, 40)))
+            {
+                boards.push_back(board.tick());
+            }
+            ImGui::SameLine(0, 5);
+            if (ImGui::Button("Setup", ImVec2(100, 40)))
+            {
+                state.setup_mode = true;
+            }
         }
     }
     ImGui::End();
